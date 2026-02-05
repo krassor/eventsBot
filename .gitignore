@@ -1,0 +1,35 @@
+.vscode
+.idea
+Procfile
+.DS_Store
+run_docker_build.sh
+Dockerfile copy
+prometheus copy.yml
+Dockerfile_dev
+Dockerfile.dev
+docker-compose-dev.yml
+run_docker_build_dev.sh
+qodana.yaml
+*docker-compose*.yml
+*config*.yml
+questionnaire.json
+*.conf
+data
+letsencrypt
+.env
+/config/
+!internal/config/
+app/test/
+eventsBot/app/test/
+.idea
+.agent
+nginx/
+portainer-data/
+prometheus/
+bin/
+ssh pg.txt
+pay.json
+.postman
+postman
+main
+/main
