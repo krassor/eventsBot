@@ -7,6 +7,7 @@ import (
 	"app/main.go/internal/orchestrator"
 	"app/main.go/internal/repositories"
 	"app/main.go/internal/scraper"
+	telegramBot "app/main.go/internal/telegram"
 	"app/main.go/internal/utils/logger/handlers/slogpretty"
 	"context"
 	"log/slog"
@@ -39,7 +40,8 @@ func main() {
 	repositoryService := repositories.New(log, cfg)
 	aiService := openrouter.NewClient(log, cfg, repositoryService)
 	scraperService := scraper.New(log, cfg, repositoryService)
-	orchestratorService := orchestrator.New(log, cfg, scraperService, aiService, scraperService.CompletedEventsChan)
+	tgBot := telegramBot.New(log, cfg)
+	orchestratorService := orchestrator.New(log, cfg, scraperService, aiService, repositoryService, tgBot, scraperService.CompletedEventsChan)
 
 	maxSecond := 15 * time.Second
 	waitShutdown := graceful.GracefulShutdown(
@@ -55,6 +57,12 @@ func main() {
 			"Repository service": func(ctx context.Context) error {
 				return repositoryService.Shutdown(ctx)
 			},
+			"Telegram bot": func(ctx context.Context) error {
+				return tgBot.Shutdown(ctx)
+			},
+			"Orchestrator service": func(ctx context.Context) error {
+				return orchestratorService.Shutdown(ctx)
+			},
 		},
 		log,
 	)
@@ -62,6 +70,7 @@ func main() {
 	go aiService.Start()
 	go scraperService.Start()
 	go orchestratorService.Start()
+	go tgBot.Start(30)
 
 	<-waitShutdown
 }

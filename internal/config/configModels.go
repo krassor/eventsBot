@@ -49,8 +49,15 @@ type BotConfig struct {
 	AI            AIConfig `yaml:"AI"`
 }
 
+// SiteConfig описывает сайт для скрапинга.
+type SiteConfig struct {
+	Name string `yaml:"name"` // Имя скрапера (например, "lococlub")
+	URL  string `yaml:"url"`  // URL страницы для скрапинга
+}
+
 type ScraperConfig struct {
-	JobBufferSize int `yaml:"jobBufferSize" env:"SCRAPER_JOB_BUFFER_SIZE" env-default:"10"`
-	WorkersCount  int `yaml:"workersCount" env:"SCRAPER_WORKERS_COUNT" env-default:"3"`
-	Timeout       int `yaml:"timeout" env:"SCRAPER_TIMEOUT" env-default:"600"` //in seconds
+	JobBufferSize int          `yaml:"jobBufferSize" env:"SCRAPER_JOB_BUFFER_SIZE" env-default:"10"`
+	WorkersCount  int          `yaml:"workersCount" env:"SCRAPER_WORKERS_COUNT" env-default:"3"`
+	Timeout       int          `yaml:"timeout" env:"SCRAPER_TIMEOUT" env-default:"600"` //in seconds
+	Sites         []SiteConfig `yaml:"sites"`                                           // Список сайтов для скрапинга
 }

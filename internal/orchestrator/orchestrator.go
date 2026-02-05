@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -20,12 +22,24 @@ type AI interface {
 	AddJob(requestID uuid.UUID, event domain.Event) (chan struct{}, error)
 }
 
+// Repository определяет интерфейс для взаимодействия с хранилищем данных.
+type Repository interface {
+	FindEventsByStatus(ctx context.Context, status domain.EventStatus) ([]domain.Event, error)
+}
+
+// TelegramBot определяет интерфейс для взаимодействия с Telegram ботом.
+type TelegramBot interface {
+	SendEvent(event *domain.Event, channelIDs []int64) error
+}
+
 // Orchestrator управляет пайплайном: scraper → AI.
 type Orchestrator struct {
 	logger              *slog.Logger
 	cfg                 *config.Config
 	scraper             Scraper
 	ai                  AI
+	repository          Repository
+	telegramBot         TelegramBot
 	completedEventsChan <-chan domain.Event
 	doneChans           []chan struct{}
 	mu                  sync.Mutex
@@ -33,7 +47,7 @@ type Orchestrator struct {
 }
 
 // New создаёт новый экземпляр Orchestrator.
-func New(logger *slog.Logger, cfg *config.Config, scraper Scraper, ai AI, completedEventsChan <-chan domain.Event) *Orchestrator {
+func New(logger *slog.Logger, cfg *config.Config, scraper Scraper, ai AI, repository Repository, telegramBot TelegramBot, completedEventsChan <-chan domain.Event) *Orchestrator {
 	op := "Orchestrator.New()"
 	log := logger.With(slog.String("op", op))
 	log.Info("Creating orchestrator")
@@ -43,6 +57,8 @@ func New(logger *slog.Logger, cfg *config.Config, scraper Scraper, ai AI, comple
 		cfg:                 cfg,
 		scraper:             scraper,
 		ai:                  ai,
+		repository:          repository,
+		telegramBot:         telegramBot,
 		completedEventsChan: completedEventsChan,
 		doneChans:           make([]chan struct{}, 0),
 		shutdownChan:        make(chan struct{}),
@@ -51,18 +67,58 @@ func New(logger *slog.Logger, cfg *config.Config, scraper Scraper, ai AI, comple
 
 // Start запускает оркестратор.
 // Запускает горутину для обработки завершённых событий скрапера.
+// Также добавляет все сайты из конфигурации в очередь скрапера.
 func (o *Orchestrator) Start() {
 	op := "Orchestrator.Start()"
 	log := o.logger.With(slog.String("op", op))
 	log.Info("orchestrator started")
 
 	// Горутина слушает CompletedEventsChan от скрапера и отправляет в AI
-	go o.processCompletedEvents()
+	go o.processScrapedEvents()
+
+	// Горутина слушает NewEventsChan от репозитория и отправляет в AI
+	go o.processNewEvents()
+
+	events, err := o.repository.FindEventsByStatus(context.Background(), domain.EventStatusReadyToApprove)
+	if err != nil {
+		log.Error("failed to find events", slog.String("error", err.Error()))
+		return
+	}
+
+	for _, event := range events {
+		o.telegramBot.SendEvent(&event, []int64{-1003669376196})
+	}
+
+	// Добавляем сайты из конфигурации в очередь скрапера
+	if err := o.EnqueueSites(); err != nil {
+		log.Error("failed to enqueue sites", slog.String("error", err.Error()))
+	}
+}
+
+// processNewEvents ищет все события в статусе NEW в репозитории и отправляет в AI
+func (o *Orchestrator) processNewEvents() {
+	op := "Orchestrator.processNewEvents()"
+	log := o.logger.With(slog.String("op", op))
+
+	events, err := o.repository.FindEventsByStatus(context.Background(), domain.EventStatusNew)
+	if err != nil {
+		log.Error("failed to find new events", slog.String("error", err.Error()))
+		return
+	}
+
+	for _, event := range events {
+		_, err := o.ai.AddJob(uuid.New(), event)
+		if err != nil {
+			log.Error("failed to add AI job", slog.String("error", err.Error()))
+			continue
+		}
+		log.Debug("event sent to AI", slog.String("name", event.Name))
+	}
 }
 
 // processCompletedEvents слушает канал завершённых событий и отправляет их в AI.
-func (o *Orchestrator) processCompletedEvents() {
-	op := "Orchestrator.processCompletedEvents()"
+func (o *Orchestrator) processScrapedEvents() {
+	op := "Orchestrator.processScrapedEvents()"
 	log := o.logger.With(slog.String("op", op))
 
 	for {
@@ -118,36 +174,44 @@ func (o *Orchestrator) AddJob(siteName string, url string) error {
 	return nil
 }
 
-// WaitAll ожидает завершения всех добавленных джоб скрапера.
-func (o *Orchestrator) WaitAll() {
-	op := "Orchestrator.WaitAll()"
+// EnqueueSites добавляет все сайты из конфигурации в очередь скрапера.
+func (o *Orchestrator) EnqueueSites() error {
+	op := "Orchestrator.EnqueueSites()"
 	log := o.logger.With(slog.String("op", op))
 
-	o.mu.Lock()
-	chans := make([]chan struct{}, len(o.doneChans))
-	copy(chans, o.doneChans)
-	o.mu.Unlock()
-
-	log.Info("waiting for all scraper jobs", slog.Int("count", len(chans)))
-
-	var wg sync.WaitGroup
-	for _, doneChan := range chans {
-		wg.Add(1)
-		go func(ch chan struct{}) {
-			defer wg.Done()
-			<-ch
-		}(doneChan)
+	sites := o.cfg.ScraperConfig.Sites
+	if len(sites) == 0 {
+		log.Warn("no sites configured for scraping")
+		return nil
 	}
-	wg.Wait()
 
-	o.mu.Lock()
-	o.doneChans = make([]chan struct{}, 0)
-	o.mu.Unlock()
+	log.Info("enqueueing sites for scraping", slog.Int("count", len(sites)))
 
-	log.Info("all scraper jobs completed")
+	for _, site := range sites {
+		if err := o.AddJob(site.Name, site.URL); err != nil {
+			log.Error("failed to enqueue site",
+				slog.String("name", site.Name),
+				slog.String("url", site.URL),
+				slog.String("error", err.Error()),
+			)
+			// Продолжаем добавлять остальные сайты
+			continue
+		}
+		log.Debug("site enqueued", slog.String("name", site.Name), slog.String("url", site.URL))
+	}
+
+	return nil
 }
 
 // Shutdown корректно завершает оркестратор.
-func (o *Orchestrator) Shutdown() {
-	close(o.shutdownChan)
+func (o *Orchestrator) Shutdown(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("exit tgBot: %w", ctx.Err())
+		default:
+			close(o.shutdownChan)
+			return nil
+		}
+	}
 }

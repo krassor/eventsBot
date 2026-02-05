@@ -48,8 +48,12 @@ func New(logger *slog.Logger, cfg *config.Config /*AIBot AIBotApi*/) *Bot {
 	if err != nil {
 		log.Error("error auth telegram bot", slog.String("error", err.Error()))
 	}
-	//TODO: add to env BOTDEBUG
-	bot.Debug = false
+
+	if cfg.Env == "local" {
+		bot.Debug = true
+	} else {
+		bot.Debug = false
+	}
 
 	log.Info("Authorized on account", slog.String("UserName", bot.Self.UserName))
 
@@ -67,8 +71,8 @@ func New(logger *slog.Logger, cfg *config.Config /*AIBot AIBotApi*/) *Bot {
 	}
 }
 
-func (bot *Bot) Update(updateTimeout int) {
-	op := "tgBot.Update()"
+func (bot *Bot) Start(updateTimeout int) {
+	op := "tgBot.Start()"
 	log := bot.log.With(
 		slog.String("op", op),
 	)
@@ -238,45 +242,6 @@ func splitTextIntoChunks(text string, chunkSize int) []string {
 	return chunks
 }
 
-// func (bot *Bot) sendMenu(inputMsg *tgbotapi.Message, replyText string) error {
-// 	op := "tgBot.sendMenu()"
-// 	log := bot.log.With(
-// 		slog.String("op", op),
-// 	)
-// 	rows := []tgbotapi.InlineKeyboardButton{
-// 		tgbotapi.NewInlineKeyboardButtonData("Посмотреть календарь", "schedule"),
-// 		tgbotapi.NewInlineKeyboardButtonData("Забронировать слот", "feedback"),
-// 	}
-
-// 	if inputMsg.From.ID == bot.tgbot.Self.ID {
-// 		rows = append(rows, tgbotapi.NewInlineKeyboardButtonData("Закрыть", "close"))
-// 	}
-
-// 	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(rows)
-// 	replyMsg := tgbotapi.NewMessage(inputMsg.Chat.ID, replyText)
-// 	replyMsg.ReplyMarkup = inlineKeyboard
-
-// 	_, err := bot.tgbot.Send(replyMsg)
-// 	if err != nil {
-// 		return fmt.Errorf("tgbot.sendMessage: %w", err)
-// 	}
-
-// 	log.Info("sent menu")
-// 	return nil
-// }
-
-// Shutdown gracefully stops the Telegram bot's operations.
-//
-// It attempts to close all necessary channels and stop receiving updates.
-// If the provided context is cancelled before the shutdown process completes,
-// it returns an error indicating that the bot exited due to context cancellation.
-//
-// Parameters:
-//   - ctx: A context.Context that allows for cancellation of the shutdown process.
-//
-// Returns:
-//   - An error if the shutdown process fails or if the context is cancelled,
-//     otherwise nil if the shutdown completes successfully.
 func (bot *Bot) Shutdown(ctx context.Context) error {
 	for {
 		select {

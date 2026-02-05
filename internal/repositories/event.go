@@ -159,6 +159,25 @@ func (r *Repository) ListEvents(ctx context.Context) ([]domain.Event, error) {
 	return result, nil
 }
 
+// FindEventsByStatus возвращает список событий с указанным статусом.
+func (r *Repository) FindEventsByStatus(ctx context.Context, status domain.EventStatus) ([]domain.Event, error) {
+	var repoEvents []repositories.Event
+	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
+	          FROM events WHERE status = $1 ORDER BY date ASC`
+
+	err := r.DB.SelectContext(ctx, &repoEvents, query, string(status))
+	if err != nil {
+		return nil, fmt.Errorf("error in FindEventsByStatus(): %w", err)
+	}
+
+	result := make([]domain.Event, len(repoEvents))
+	for i, e := range repoEvents {
+		result[i] = mapToDomain(e)
+	}
+
+	return result, nil
+}
+
 func mapToRepo(e domain.Event) repositories.Event {
 	return repositories.Event{
 		BaseModel: repositories.BaseModel{

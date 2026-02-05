@@ -23,9 +23,9 @@ import (
 
 const (
 	// retryCount определяет количество попыток повторного запроса при ошибках.
-	retryCount int = 3
+	retryCount int = 10
 	// retryDuration задаёт интервал между попытками повторного запроса.
-	retryDuration time.Duration = 10 * time.Second
+	retryDuration time.Duration = 5 * time.Second
 )
 
 type Repository interface {
@@ -160,9 +160,9 @@ func (s *Openrouter) handleJob(id int) {
 
 			// Обогащаем событие через AI
 			enrichedResponse, err := s.EnrichEventWithAI(ctx, joblog, job.requestID, job.event)
-			cancel()
 
 			if err != nil {
+				cancel()
 				joblog.Error("failed to enrich event", slog.String("error", err.Error()))
 				close(job.Done)
 				continue
@@ -173,6 +173,8 @@ func (s *Openrouter) handleJob(id int) {
 			updatedEvent.Status = domain.EventStatusAIEnriched
 
 			_, err = s.repository.UpdateEvent(ctx, updatedEvent)
+			cancel() // Освобождаем контекст после всех операций
+
 			if err != nil {
 				joblog.Error("failed to update event", slog.String("error", err.Error()))
 				close(job.Done)
@@ -359,10 +361,12 @@ func (s *Openrouter) EnrichEventWithAI(ctx context.Context, logger *slog.Logger,
 		return dto.EventStructuredResponseSchema{}, fmt.Errorf("empty AI response")
 	}
 
-	b := []byte(resp.Choices[0].Message.Content.Text)
+	// Очищаем ответ от markdown-разметки (```json ... ```)
+	cleanedResponse := cleanJSONResponse(resp.Choices[0].Message.Content.Text)
+	b := []byte(cleanedResponse)
 	err = json.Unmarshal(b, &responseSchema)
 	if err != nil {
-		log.Error("error unmarshal response", sl.Err(err))
+		log.Error("error unmarshal response", sl.Err(err), slog.String("response", cleanedResponse))
 		return dto.EventStructuredResponseSchema{}, fmt.Errorf("unmarshal error: %w", err)
 	}
 
@@ -387,6 +391,26 @@ func isEOFError(err error) bool {
 		return strings.Contains(err.Error(), "EOF")
 	}
 	return false
+}
+
+// cleanJSONResponse очищает ответ AI от markdown-разметки.
+// Некоторые модели (например, Claude) могут оборачивать JSON в ```json ... ```.
+func cleanJSONResponse(response string) string {
+	response = strings.TrimSpace(response)
+
+	// Убираем markdown блок ```json или ``` в начале
+	if after, ok := strings.CutPrefix(response, "```json"); ok {
+		response = after
+	} else if after0, ok0 := strings.CutPrefix(response, "```"); ok0 {
+		response = after0
+	}
+
+	// Убираем ``` в конце
+	if before, ok := strings.CutSuffix(response, "```"); ok {
+		response = before
+	}
+
+	return strings.TrimSpace(response)
 }
 
 // writeResponseInFile сохраняет текстовый ответ ИИ в файл.

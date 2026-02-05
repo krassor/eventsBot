@@ -12,6 +12,8 @@ import (
 
 	"log/slog"
 
+	"app/main.go/internal/models/domain"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -580,4 +582,113 @@ func (bot *Bot) handleCallbackQuery(update *tgbotapi.Update) {
 	// Или отправить новое сообщение:
 	// msg := tgbotapi.NewMessage(chatID, responseText)
 	// _, _ = bot.tgbot.Send(msg)
+}
+
+// sendEvent отправляет событие во все каналы, где добавлен бот.
+// Если статус EventStatusReadyToApprove, добавляет inline keyboard с кнопками approve/decline.
+func (bot *Bot) SendEvent(event *domain.Event, channelIDs []int64) error {
+	op := "bot.sendEvent()"
+	log := bot.log.With(
+		slog.String("op", op),
+		slog.String("eventName", event.Name),
+	)
+
+	// Формируем текст сообщения
+	messageText := bot.formatEventMessage(event)
+
+	for _, channelID := range channelIDs {
+		var err error
+
+		// Если есть фото, отправляем с фото
+		if event.Photo != "" {
+			photo := tgbotapi.NewPhoto(channelID, tgbotapi.FileURL(event.Photo))
+			photo.Caption = messageText
+			photo.ParseMode = tgbotapi.ModeHTML
+
+			// Добавляем inline keyboard для модерации
+			if event.Status == domain.EventStatusReadyToApprove {
+				photo.ReplyMarkup = bot.createApprovalKeyboard(event.ID.String())
+			}
+
+			_, err = bot.tgbot.Send(photo)
+		} else {
+			// Если нет фото, отправляем текстовое сообщение
+			msg := tgbotapi.NewMessage(channelID, messageText)
+			msg.ParseMode = tgbotapi.ModeHTML
+
+			// Добавляем inline keyboard для модерации
+			if event.Status == domain.EventStatusReadyToApprove {
+				msg.ReplyMarkup = bot.createApprovalKeyboard(event.ID.String())
+			}
+
+			_, err = bot.tgbot.Send(msg)
+		}
+
+		if err != nil {
+			log.Error("failed to send event to channel",
+				slog.Int64("channelID", channelID),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		log.Debug("event sent to channel", slog.Int64("channelID", channelID))
+	}
+
+	return nil
+}
+
+// formatEventMessage форматирует событие в HTML-текст для Telegram.
+func (bot *Bot) formatEventMessage(event *domain.Event) string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "<b>%s</b>\n\n", event.Name)
+
+	if event.Description != "" {
+		fmt.Fprintf(&sb, "%s\n\n", event.Description)
+	}
+
+	if !event.Date.IsZero() {
+		fmt.Fprintf(&sb, "📅 <b>Дата:</b> %s\n", event.Date.Format("02.01.2006 15:04"))
+	}
+
+	if event.Price > 0 {
+		fmt.Fprintf(&sb, "💰 <b>Цена:</b> %.0f %s\n", event.Price, event.Currency)
+	}
+
+	if event.Tag != "" {
+		fmt.Fprintf(&sb, "🏷 %s\n", event.Tag)
+	}
+
+	fmt.Fprint(&sb, "\n")
+
+	if event.EventLink != "" {
+		fmt.Fprintf(&sb, "🔗 <a href=\"%s\">Подробнее</a>\n", event.EventLink)
+	}
+
+	if event.MapLink != "" {
+		fmt.Fprintf(&sb, "📍 <a href=\"%s\">На карте</a>\n", event.MapLink)
+	}
+
+	if event.CalendarLinkIOS != "" || event.CalendarLinkAndroid != "" {
+		sb.WriteString("\n📆 Добавить в календарь:\n")
+		if event.CalendarLinkIOS != "" {
+			fmt.Fprintf(&sb, "  • <a href=\"%s\">iOS</a>\n", event.CalendarLinkIOS)
+		}
+		if event.CalendarLinkAndroid != "" {
+			fmt.Fprintf(&sb, "  • <a href=\"%s\">Android</a>\n", event.CalendarLinkAndroid)
+		}
+	}
+
+	return sb.String()
+}
+
+// createApprovalKeyboard создаёт inline keyboard для модерации события.
+func (bot *Bot) createApprovalKeyboard(eventID string) tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✅ Approve", "approve_"+eventID),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Decline", "decline_"+eventID),
+		),
+	)
 }

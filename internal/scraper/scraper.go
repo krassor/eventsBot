@@ -142,9 +142,9 @@ func (s *Scraper) handleJob(id int) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.cfg.ScraperConfig.Timeout)*time.Second)
 
 			events, err := scrapeFunc(ctx, job.url, s.shutdownChannel)
-			cancel()
 
 			if err != nil {
+				cancel()
 				joblog.Error("scraping failed", slog.String("error", err.Error()))
 				close(job.Done)
 				continue
@@ -178,6 +178,7 @@ func (s *Scraper) handleJob(id int) {
 				}
 			}
 
+			cancel() // Освобождаем контекст после обработки всех событий
 			close(job.Done)
 
 			joblog.Info("scraping completed", slog.Int("eventsCount", len(events)))

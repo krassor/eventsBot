@@ -14,6 +14,12 @@ const (
 	EventStatusNew EventStatus = "NEW"
 	// EventStatusAIEnriched — событие обогащено AI
 	EventStatusAIEnriched EventStatus = "AI_ENRICHED"
+	// EventStatusReadyToApprove — событие готово к модерации
+	EventStatusReadyToApprove EventStatus = "READY_TO_APPROVE"
+	// EventStatusApproved — событие одобрено
+	EventStatusApproved EventStatus = "APPROVED"
+	// EventStatusRejected — событие отклонено
+	EventStatusRejected EventStatus = "REJECTED"
 )
 
 // Event - доменная модель мероприятия
