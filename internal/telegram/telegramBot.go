@@ -18,9 +18,15 @@ type AIBotApi interface {
 	ProcessMessage(ctx context.Context, userID int64, message string) (string, error)
 }
 
+// Repository определяет интерфейс для взаимодействия с хранилищем событий.
+type Repository interface {
+	UpdateEventStatus(ctx context.Context, eventID string, status string) error
+}
+
 type Bot struct {
-	tgbot *tgbotapi.BotAPI
-	cfg   *config.Config
+	tgbot      *tgbotapi.BotAPI
+	cfg        *config.Config
+	repository Repository
 	// AIBot           AIBotApi
 	shutdownChannel chan struct{}
 	ctx             context.Context
@@ -38,7 +44,7 @@ type UserState struct {
 	FileType     string
 }
 
-func New(logger *slog.Logger, cfg *config.Config /*AIBot AIBotApi*/) *Bot {
+func New(logger *slog.Logger, cfg *config.Config, repository Repository) *Bot {
 	op := "telegramBot.New()"
 	log := logger.With(
 		slog.String("op", op),
@@ -60,9 +66,9 @@ func New(logger *slog.Logger, cfg *config.Config /*AIBot AIBotApi*/) *Bot {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Bot{
-		tgbot: bot,
-		cfg:   cfg,
-		// AIBot:           AIBot,
+		tgbot:           bot,
+		cfg:             cfg,
+		repository:      repository,
 		shutdownChannel: make(chan struct{}),
 		ctx:             ctx,
 		cancel:          cancel,

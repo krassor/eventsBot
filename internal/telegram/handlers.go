@@ -484,99 +484,25 @@ func (bot *Bot) handleCallbackQuery(update *tgbotapi.Update) {
 
 	callback := update.CallbackQuery
 	data := callback.Data
-	chatID := callback.Message.Chat.ID
-	userID := callback.From.ID
 
 	// Отправляем "секретный" ответ, чтобы скрыть часики у кнопки
 	callbackConfig := tgbotapi.NewCallback(callback.ID, "")
 	callbackConfig.ShowAlert = false
 	_, err := bot.tgbot.Request(callbackConfig)
 	if err != nil {
-		log.Error(
-			"failed to send callback response",
-			slog.String("error", err.Error()),
-		)
+		log.Error("failed to send callback response", slog.String("error", err.Error()))
 	}
 
-	var responseText string
-	var editMsg tgbotapi.EditMessageTextConfig
-	userState := bot.UsersState[userID]
-
-	switch data {
-	case "ADULT":
-		responseText = "Вы выбрали: тип опроса Adult\\.\n\rВыберите тип файла:"
-		userState.SurveyType = "ADULT"
-		inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Prompt", "PROMPT"),
-				tgbotapi.NewInlineKeyboardButtonData("Template", "TEMPLATE"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Cancel", "CANCEL"),
-			),
-		)
-		editMsg = tgbotapi.NewEditMessageTextAndMarkup(chatID, callback.Message.MessageID, responseText, inlineKeyboard)
-
-	case "SCHOOLCHILD":
-		responseText = "Вы выбрали: тип опроса Schoolchild\\.\n\rВыберите тип файла:"
-		userState.SurveyType = "SCHOOLCHILD"
-		inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Prompt", "PROMPT"),
-				tgbotapi.NewInlineKeyboardButtonData("Template", "TEMPLATE"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Cancel", "CANCEL"),
-			),
-		)
-		editMsg = tgbotapi.NewEditMessageTextAndMarkup(chatID, callback.Message.MessageID, responseText, inlineKeyboard)
-
-	case "PROMPT":
-		responseText = "Вы выбрали: тип файла prompt\\.\n\rЗагрузите *\\.md* файл:"
-		userState.FileType = "PROMPT"
-		userState.AwaitingFile = true
-		inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Cancel", "CANCEL"),
-			),
-		)
-		editMsg = tgbotapi.NewEditMessageTextAndMarkup(chatID, callback.Message.MessageID, responseText, inlineKeyboard)
-
-	case "TEMPLATE":
-		responseText = "Вы выбрали: тип файла template\\.\n\rЗагрузите *\\.html* файл:"
-		userState.FileType = "TEMPLATE"
-		userState.AwaitingFile = true
-		inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Cancel", "CANCEL"),
-			),
-		)
-		editMsg = tgbotapi.NewEditMessageTextAndMarkup(chatID, callback.Message.MessageID, responseText, inlineKeyboard)
-
-	case "CANCEL":
-		responseText = "Команда отменена"
-		userState.AwaitingFile = false
-		userState.SurveyType = ""
-		userState.FileType = ""
-		editMsg = tgbotapi.NewEditMessageText(chatID, callback.Message.MessageID, responseText)
-
-	default:
-		responseText = "Неизвестный тип опроса/файла\\."
-		userState.AwaitingFile = false
-		userState.SurveyType = ""
-		userState.FileType = ""
-		editMsg = tgbotapi.NewEditMessageText(chatID, callback.Message.MessageID, responseText)
+	// Обработка approve/decline колбэков для модерации событий
+	if after, ok := strings.CutPrefix(data, "approve_"); ok {
+		eventID := after
+		bot.handleApproveEvent(callback, eventID)
+		return
 	}
-
-	bot.UsersState[userID] = userState
-	editMsg.ParseMode = tgbotapi.ModeMarkdownV2
-
-	_, err = bot.tgbot.Send(editMsg)
-	if err != nil {
-		log.Error(
-			"failed to send callback response",
-			slog.String("error", err.Error()),
-		)
+	if after, ok := strings.CutPrefix(data, "decline_"); ok {
+		eventID := after
+		bot.handleDeclineEvent(callback, eventID)
+		return
 	}
 
 	// Или отправить новое сообщение:
@@ -691,4 +617,72 @@ func (bot *Bot) createApprovalKeyboard(eventID string) tgbotapi.InlineKeyboardMa
 			tgbotapi.NewInlineKeyboardButtonData("❌ Decline", "decline_"+eventID),
 		),
 	)
+}
+
+// handleApproveEvent обрабатывает нажатие кнопки "Approve" для события.
+func (bot *Bot) handleApproveEvent(callback *tgbotapi.CallbackQuery, eventID string) {
+	op := "bot.handleApproveEvent"
+	log := bot.log.With(
+		slog.String("op", op),
+		slog.String("eventID", eventID),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := bot.repository.UpdateEventStatus(ctx, eventID, string(domain.EventStatusApproved))
+	if err != nil {
+		log.Error("failed to approve event", slog.String("error", err.Error()))
+		bot.sendCallbackResponse(callback, "❌ Ошибка при одобрении события")
+		return
+	}
+
+	log.Info("event approved")
+	bot.sendCallbackResponse(callback, "✅ Событие одобрено")
+	bot.removeApprovalKeyboard(callback)
+}
+
+// handleDeclineEvent обрабатывает нажатие кнопки "Decline" для события.
+func (bot *Bot) handleDeclineEvent(callback *tgbotapi.CallbackQuery, eventID string) {
+	op := "bot.handleDeclineEvent"
+	log := bot.log.With(
+		slog.String("op", op),
+		slog.String("eventID", eventID),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := bot.repository.UpdateEventStatus(ctx, eventID, string(domain.EventStatusRejected))
+	if err != nil {
+		log.Error("failed to decline event", slog.String("error", err.Error()))
+		bot.sendCallbackResponse(callback, "❌ Ошибка при отклонении события")
+		return
+	}
+
+	log.Info("event declined")
+	bot.sendCallbackResponse(callback, "❌ Событие отклонено")
+	bot.removeApprovalKeyboard(callback)
+}
+
+// sendCallbackResponse отправляет всплывающее уведомление в ответ на callback.
+func (bot *Bot) sendCallbackResponse(callback *tgbotapi.CallbackQuery, text string) {
+	callbackConfig := tgbotapi.NewCallback(callback.ID, text)
+	callbackConfig.ShowAlert = true
+	_, _ = bot.tgbot.Request(callbackConfig)
+}
+
+// removeApprovalKeyboard удаляет inline keyboard из сообщения после модерации.
+func (bot *Bot) removeApprovalKeyboard(callback *tgbotapi.CallbackQuery) {
+	if callback.Message == nil {
+		return
+	}
+
+	// Редактируем сообщение, убирая клавиатуру
+	editMsg := tgbotapi.NewEditMessageReplyMarkup(
+		callback.Message.Chat.ID,
+		callback.Message.MessageID,
+		tgbotapi.InlineKeyboardMarkup{InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{}},
+	)
+	_, _ = bot.tgbot.Send(editMsg)
 }

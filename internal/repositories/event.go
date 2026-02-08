@@ -215,3 +215,26 @@ func mapToDomain(e repositories.Event) domain.Event {
 		Status:              domain.EventStatus(e.Status),
 	}
 }
+
+// UpdateEventStatus обновляет статус события по его ID.
+func (r *Repository) UpdateEventStatus(ctx context.Context, eventID string, status string) error {
+	op := "repository.UpdateEventStatus()"
+
+	updateQuery := `UPDATE events SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+
+	result, err := r.DB.ExecContext(ctx, updateQuery, status, eventID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: failed to get rows affected: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%s: event not found with id %s", op, eventID)
+	}
+
+	return nil
+}

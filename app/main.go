@@ -40,7 +40,7 @@ func main() {
 	repositoryService := repositories.New(log, cfg)
 	aiService := openrouter.NewClient(log, cfg, repositoryService)
 	scraperService := scraper.New(log, cfg, repositoryService)
-	tgBot := telegramBot.New(log, cfg)
+	tgBot := telegramBot.New(log, cfg, repositoryService)
 	orchestratorService := orchestrator.New(log, cfg, scraperService, aiService, repositoryService, tgBot, scraperService.CompletedEventsChan)
 
 	maxSecond := 15 * time.Second
