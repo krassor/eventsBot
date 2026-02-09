@@ -33,6 +33,7 @@ type Event struct {
 	Currency            string
 	EventLink           string
 	MapLink             string
+	VideoURL            string
 	CalendarLinkIOS     string
 	CalendarLinkAndroid string
 	Tag                 string

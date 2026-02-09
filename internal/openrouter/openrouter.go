@@ -299,7 +299,7 @@ func (s *Openrouter) EnrichEventWithAI(ctx context.Context, logger *slog.Logger,
 1. Если описание меньше 50 символов, дополни его
 2. Убери лишний мусорный текст и куски скриптов
 3. Переведи описание на русский язык
-4. Определи тег события (концерт, рок-концерт, джаз, электроника, фестиваль и т.д.)
+4. Определи теги события
 5. Сгенерируй ссылку на Google Maps (если есть адрес)
 6. Сгенерируй ссылки на календари iOS и Android`,
 		event.Name,
@@ -393,8 +393,9 @@ func isEOFError(err error) bool {
 	return false
 }
 
-// cleanJSONResponse очищает ответ AI от markdown-разметки.
-// Некоторые модели (например, Claude) могут оборачивать JSON в ```json ... ```.
+// cleanJSONResponse очищает ответ AI от markdown-разметки и лишнего текста.
+// Некоторые модели (например, Claude) могут оборачивать JSON в ```json ... ```
+// и добавлять текст после JSON объекта.
 func cleanJSONResponse(response string) string {
 	response = strings.TrimSpace(response)
 
@@ -405,12 +406,58 @@ func cleanJSONResponse(response string) string {
 		response = after0
 	}
 
-	// Убираем ``` в конце
-	if before, ok := strings.CutSuffix(response, "```"); ok {
-		response = before
+	response = strings.TrimSpace(response)
+
+	// Находим JSON объект: от первой { до соответствующей }
+	startIdx := strings.Index(response, "{")
+	if startIdx == -1 {
+		return response
 	}
 
-	return strings.TrimSpace(response)
+	// Ищем закрывающую скобку, учитывая вложенность
+	depth := 0
+	endIdx := -1
+	inString := false
+	escaped := false
+
+	for i := startIdx; i < len(response); i++ {
+		c := response[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		if c == '{' {
+			depth++
+		} else if c == '}' {
+			depth--
+			if depth == 0 {
+				endIdx = i
+				break
+			}
+		}
+	}
+
+	if endIdx != -1 {
+		return response[startIdx : endIdx+1]
+	}
+
+	return response
 }
 
 // writeResponseInFile сохраняет текстовый ответ ИИ в файл.

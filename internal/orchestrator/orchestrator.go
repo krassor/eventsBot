@@ -86,7 +86,7 @@ func (o *Orchestrator) Start() {
 	}
 
 	for _, event := range events {
-		o.telegramBot.SendEvent(&event, []int64{-1003669376196})
+		o.telegramBot.SendEvent(&event, o.cfg.BotConfig.ChannelIDs)
 	}
 
 	// Добавляем сайты из конфигурации в очередь скрапера

@@ -45,6 +45,7 @@ type AIConfig struct {
 
 type BotConfig struct {
 	Admins        []string `yaml:"admins" env-default:"KrAssor"`
+	ChannelIDs    []int64  `yaml:"channelIDs" env-default:"-1003669376196"`
 	TgbotApiToken string   `yaml:"tgbot_apitoken" env:"TGBOT_APITOKEN" env-required:"true"`
 	AI            AIConfig `yaml:"AI"`
 }

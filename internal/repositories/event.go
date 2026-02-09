@@ -23,9 +23,9 @@ func (r *Repository) CreateEvent(ctx context.Context, event domain.Event) (domai
 
 	insertQuery := `INSERT INTO events (
 		id, name, photo, description, date, price, currency, 
-		event_link, map_link, calendar_link_ios, calendar_link_android, tag, status,
+		event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status,
 		created_at, updated_at
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 
 	_, err := r.DB.ExecContext(ctx, insertQuery,
 		repoEvent.ID,
@@ -37,6 +37,7 @@ func (r *Repository) CreateEvent(ctx context.Context, event domain.Event) (domai
 		repoEvent.Currency,
 		repoEvent.EventLink,
 		repoEvent.MapLink,
+		repoEvent.VideoURL,
 		repoEvent.CalendarLinkIOS,
 		repoEvent.CalendarLinkAndroid,
 		repoEvent.Tag,
@@ -51,7 +52,7 @@ func (r *Repository) CreateEvent(ctx context.Context, event domain.Event) (domai
 
 func (r *Repository) FindEventByID(ctx context.Context, id uuid.UUID) (domain.Event, error) {
 	var repoEvent repositories.Event
-	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
+	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
 	          FROM events WHERE id = $1 LIMIT 1`
 
 	err := r.DB.GetContext(ctx, &repoEvent, query, id)
@@ -67,7 +68,7 @@ func (r *Repository) FindEventByID(ctx context.Context, id uuid.UUID) (domain.Ev
 
 func (r *Repository) FindEventByLinkAndDate(ctx context.Context, link string, date time.Time) (domain.Event, error) {
 	var repoEvent repositories.Event
-	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
+	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
 	          FROM events WHERE event_link = $1 AND date = $2 LIMIT 1`
 
 	err := r.DB.GetContext(ctx, &repoEvent, query, link, date)
@@ -86,9 +87,9 @@ func (r *Repository) UpdateEvent(ctx context.Context, event domain.Event) (domai
 
 	updateQuery := `UPDATE events SET 
 		name = $1, photo = $2, description = $3, date = $4, price = $5, currency = $6, 
-		event_link = $7, map_link = $8, calendar_link_ios = $9, calendar_link_android = $10, tag = $11, status = $12,
+		event_link = $7, map_link = $8, video_url = $9, calendar_link_ios = $10, calendar_link_android = $11, tag = $12, status = $13,
 		updated_at = CURRENT_TIMESTAMP
-		WHERE id = $13`
+		WHERE id = $14`
 
 	result, err := r.DB.ExecContext(ctx, updateQuery,
 		repoEvent.Name,
@@ -99,6 +100,7 @@ func (r *Repository) UpdateEvent(ctx context.Context, event domain.Event) (domai
 		repoEvent.Currency,
 		repoEvent.EventLink,
 		repoEvent.MapLink,
+		repoEvent.VideoURL,
 		repoEvent.CalendarLinkIOS,
 		repoEvent.CalendarLinkAndroid,
 		repoEvent.Tag,
@@ -143,7 +145,7 @@ func (r *Repository) DeleteEvent(ctx context.Context, id uuid.UUID) error {
 
 func (r *Repository) ListEvents(ctx context.Context) ([]domain.Event, error) {
 	var repoEvents []repositories.Event
-	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
+	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
 	          FROM events ORDER BY date ASC`
 
 	err := r.DB.SelectContext(ctx, &repoEvents, query)
@@ -162,7 +164,7 @@ func (r *Repository) ListEvents(ctx context.Context) ([]domain.Event, error) {
 // FindEventsByStatus возвращает список событий с указанным статусом.
 func (r *Repository) FindEventsByStatus(ctx context.Context, status domain.EventStatus) ([]domain.Event, error) {
 	var repoEvents []repositories.Event
-	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
+	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
 	          FROM events WHERE status = $1 ORDER BY date ASC`
 
 	err := r.DB.SelectContext(ctx, &repoEvents, query, string(status))
@@ -191,6 +193,7 @@ func mapToRepo(e domain.Event) repositories.Event {
 		Currency:            e.Currency,
 		EventLink:           e.EventLink,
 		MapLink:             e.MapLink,
+		VideoURL:            e.VideoURL,
 		CalendarLinkIOS:     e.CalendarLinkIOS,
 		CalendarLinkAndroid: e.CalendarLinkAndroid,
 		Tag:                 e.Tag,
@@ -209,6 +212,7 @@ func mapToDomain(e repositories.Event) domain.Event {
 		Currency:            e.Currency,
 		EventLink:           e.EventLink,
 		MapLink:             e.MapLink,
+		VideoURL:            e.VideoURL,
 		CalendarLinkIOS:     e.CalendarLinkIOS,
 		CalendarLinkAndroid: e.CalendarLinkAndroid,
 		Tag:                 e.Tag,

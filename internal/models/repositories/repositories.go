@@ -22,6 +22,7 @@ type Event struct {
 	Currency            string    `db:"currency"`
 	EventLink           string    `db:"event_link"`
 	MapLink             string    `db:"map_link"`
+	VideoURL            string    `db:"video_url"`
 	CalendarLinkIOS     string    `db:"calendar_link_ios"`
 	CalendarLinkAndroid string    `db:"calendar_link_android"`
 	Tag                 string    `db:"tag"`

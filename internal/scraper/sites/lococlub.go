@@ -143,6 +143,17 @@ func scrapeLococlubEventDetails(url string) (domain.Event, error) {
 				event.Description += "\n\nКупить билет: " + buyLink
 			}
 
+			// Видео (YouTube, Vimeo iframes или video tags)
+			if src, ok := r.HTMLDoc.Find(".mec-single-event-description iframe[src*=\"youtube\"]").Attr("src"); ok {
+				event.VideoURL = src
+			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description iframe[src*=\"vimeo\"]").Attr("src"); ok {
+				event.VideoURL = src
+			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video source").Attr("src"); ok {
+				event.VideoURL = src
+			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video").Attr("src"); ok {
+				event.VideoURL = src
+			}
+
 			event.Tag = ""
 		},
 	})
