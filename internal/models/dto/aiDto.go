@@ -2,6 +2,7 @@ package dto
 
 import (
 	"app/main.go/internal/models/domain"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,19 +11,44 @@ import (
 	"github.com/google/uuid"
 )
 
+// FlexibleStringSlice — тип, который при десериализации принимает как строку, так и массив строк.
+type FlexibleStringSlice []string
+
+func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
+	// Пробуем как массив строк
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*f = arr
+		return nil
+	}
+
+	// Пробуем как одну строку
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		if s != "" {
+			*f = []string{s}
+		} else {
+			*f = nil
+		}
+		return nil
+	}
+
+	return fmt.Errorf("tag: expected string or []string, got %s", string(data))
+}
+
 // EventStructuredResponseSchema - структура для получения данных о концертах и мероприятиях
 type EventStructuredResponseSchema struct {
-	Name                string   `json:"name" description:"Название мероприятия"`
-	Photo               string   `json:"photo" description:"Ссылка на фото мероприятия"`
-	Description         string   `json:"description" description:"Описание мероприятия"`
-	Date                string   `json:"date" description:"Дата и время мероприятия"`
-	Price               string   `json:"price" description:"Цена билета на мероприятие"`
-	Currency            string   `json:"currency" description:"Валюта цены (например: EUR, USD, RUB)"`
-	EventLink           string   `json:"event_link" description:"Ссылка на страницу мероприятия"`
-	MapLink             string   `json:"map_link" description:"Ссылка на местоположение на карте"`
-	CalendarLinkIOS     string   `json:"calendar_link_ios" description:"Ссылка для добавления в календарь iPhone"`
-	CalendarLinkAndroid string   `json:"calendar_link_android" description:"Ссылка для добавления в календарь Android"`
-	Tag                 []string `json:"tag" description:"Теги мероприятия (например: концерт, выставка, фестиваль)"`
+	Name                string              `json:"name" description:"Название мероприятия"`
+	Photo               string              `json:"photo" description:"Ссылка на фото мероприятия"`
+	Description         string              `json:"description" description:"Описание мероприятия"`
+	Date                string              `json:"date" description:"Дата и время мероприятия"`
+	Price               string              `json:"price" description:"Цена билета на мероприятие"`
+	Currency            string              `json:"currency" description:"Валюта цены (например: EUR, USD, RUB)"`
+	EventLink           string              `json:"event_link" description:"Ссылка на страницу мероприятия"`
+	MapLink             string              `json:"map_link" description:"Ссылка на местоположение на карте"`
+	CalendarLinkIOS     string              `json:"calendar_link_ios" description:"Ссылка для добавления в календарь iPhone"`
+	CalendarLinkAndroid string              `json:"calendar_link_android" description:"Ссылка для добавления в календарь Android"`
+	Tag                 FlexibleStringSlice `json:"tag" description:"Теги мероприятия (например: концерт, выставка, фестиваль)"`
 }
 
 func (e EventStructuredResponseSchema) ToDomain() domain.Event {
@@ -79,7 +105,7 @@ func (e EventStructuredResponseSchema) ApplyToEvent(event domain.Event) domain.E
 	if len(e.Tag) > 0 {
 		var tags strings.Builder
 		for _, tag := range e.Tag {
-			fmt.Fprintf(&tags, "#%s ", tag)
+			fmt.Fprintf(&tags, "#%s ", strings.TrimSpace(tag))
 		}
 		event.Tag = tags.String()
 	}

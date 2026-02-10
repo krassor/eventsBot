@@ -596,6 +596,10 @@ func (bot *Bot) formatEventMessage(event *domain.Event) string {
 		fmt.Fprintf(&sb, "📍 <a href=\"%s\">На карте</a>\n", event.MapLink)
 	}
 
+	if event.VideoURL != "" {
+		fmt.Fprintf(&sb, "🎬 <a href=\"%s\">Видео</a>\n", event.VideoURL)
+	}
+
 	if event.CalendarLinkIOS != "" || event.CalendarLinkAndroid != "" {
 		sb.WriteString("\n📆 Добавить в календарь:\n")
 		if event.CalendarLinkIOS != "" {
