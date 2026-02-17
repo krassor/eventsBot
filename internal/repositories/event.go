@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"app/main.go/internal/models/domain"
-	"app/main.go/internal/models/repositories"
+	"eventsBot/internal/models/domain"
+	"eventsBot/internal/models/repositories"
 
 	"github.com/google/uuid"
 )
@@ -143,7 +143,7 @@ func (r *Repository) DeleteEvent(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *Repository) ListEvents(ctx context.Context) ([]domain.Event, error) {
+func (r *Repository) ReadAllEvents(ctx context.Context) ([]domain.Event, error) {
 	var repoEvents []repositories.Event
 	query := `SELECT id, name, photo, description, date, price, currency, event_link, map_link, video_url, calendar_link_ios, calendar_link_android, tag, status, created_at, updated_at 
 	          FROM events ORDER BY date ASC`
@@ -221,7 +221,7 @@ func mapToDomain(e repositories.Event) domain.Event {
 }
 
 // UpdateEventStatus обновляет статус события по его ID.
-func (r *Repository) UpdateEventStatus(ctx context.Context, eventID string, status string) error {
+func (r *Repository) UpdateEventStatus(ctx context.Context, eventID uuid.UUID, status string) error {
 	op := "repository.UpdateEventStatus()"
 
 	updateQuery := `UPDATE events SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`

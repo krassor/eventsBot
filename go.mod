@@ -1,10 +1,12 @@
-module app/main.go
+module eventsBot
 
-go 1.25.1
+go 1.26.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.9.2
 	github.com/fatih/color v1.18.0
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/cors v1.2.2
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0

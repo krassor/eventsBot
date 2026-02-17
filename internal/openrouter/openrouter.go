@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"app/main.go/internal/config"
-	"app/main.go/internal/models/domain"
-	"app/main.go/internal/models/dto"
-	"app/main.go/internal/utils/logger/sl"
+	"eventsBot/internal/config"
+	"eventsBot/internal/models/domain"
+	"eventsBot/internal/models/dto"
+	"eventsBot/internal/utils/logger/sl"
 
 	"github.com/google/uuid"
 	openrouter "github.com/revrost/go-openrouter"
@@ -29,12 +29,7 @@ const (
 )
 
 type Repository interface {
-	CreateEvent(ctx context.Context, event domain.Event) (domain.Event, error)
-	FindEventByID(ctx context.Context, id uuid.UUID) (domain.Event, error)
-	FindEventByLinkAndDate(ctx context.Context, link string, date time.Time) (domain.Event, error)
 	UpdateEvent(ctx context.Context, event domain.Event) (domain.Event, error)
-	DeleteEvent(ctx context.Context, id uuid.UUID) error
-	ListEvents(ctx context.Context) ([]domain.Event, error)
 }
 
 // Job представляет задачу, передаваемую в воркер.
@@ -188,89 +183,6 @@ func (s *Openrouter) handleJob(id int) {
 	}
 }
 
-// CreateChatCompletion отправляет запрос в OpenRouter для генерации ответа.
-//
-// Параметры:
-//   - ctx: контекст с таймаутом.
-//   - logger: логгер с контекстом.
-//   - requestId: UUID запроса.
-//   - message: пользовательское сообщение (анкета).
-//   - jobType: тип запроса: ADULT, SCHOOLCHILD
-//
-// Возвращает:
-//   - Строка с ответом ИИ.
-//   - Ошибка, если запрос не удался.
-//
-// Повторяет запрос до retryCount раз при ошибках 429 или EOF.
-func (s *Openrouter) CreateChatCompletion(ctx context.Context, logger *slog.Logger, requestId uuid.UUID, message string, jobType string) (string, error) {
-	op := "openrouter.CreateChatCompletion()"
-	log := logger.With(
-		slog.String("op", op),
-		slog.String("requestID", requestId.String()),
-	)
-	log.Info("start create chat completion")
-
-	var resp openrouter.ChatCompletionResponse
-	var err error
-	var prompt string
-
-	prompt = s.cfg.BotConfig.AI.SystemRolePrompt
-
-	for retry := range retryCount {
-		var r openrouter.ChatCompletionResponse
-		var e error
-		select {
-		case <-s.shutdownChannel:
-			return "", fmt.Errorf("shutdown openrouter client")
-		default:
-			r, e = s.Client.CreateChatCompletion(
-				ctx,
-				openrouter.ChatCompletionRequest{
-					Model: s.cfg.BotConfig.AI.ModelName,
-					Messages: []openrouter.ChatCompletionMessage{
-						openrouter.SystemMessage(prompt),
-						openrouter.UserMessage(message),
-					},
-				},
-			)
-		}
-		if e != nil && (isRateLimitError(e) || isEOFError(e)) {
-			err = e
-			log.Error(
-				"Openrouter chat completion response error",
-				slog.String("error", err.Error()),
-				slog.Int("retry", retry),
-			)
-			time.Sleep(retryDuration)
-			continue
-		}
-		resp = r
-		err = e
-		break
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("return error creating chat completion request: %w", err)
-	}
-
-	log.Debug("received chat completion response", slog.Any("response role", resp.Choices[0].Message.Role))
-
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("empty AI response (no resp.Choices)")
-	}
-	responseText := resp.Choices[0].Message.Content.Text
-
-	err = s.writeResponseInFile(requestId.String(), responseText, "html")
-	if err != nil {
-		log.Error(
-			"error write response in file",
-			sl.Err(err),
-		)
-	}
-
-	return responseText, nil
-}
-
 // EnrichEventWithAI обогащает событие через AI.
 // Принимает событие и возвращает структурированный ответ с обогащёнными данными.
 func (s *Openrouter) EnrichEventWithAI(ctx context.Context, logger *slog.Logger, requestId uuid.UUID, event domain.Event) (dto.EventStructuredResponseSchema, error) {
@@ -301,7 +213,7 @@ func (s *Openrouter) EnrichEventWithAI(ctx context.Context, logger *slog.Logger,
 3. Переведи описание на русский язык
 4. Определи теги события
 5. Сгенерируй ссылку на Google Maps (если есть адрес)
-6. Сгенерируй ссылки на календари iOS и Android`,
+6. Сгенерируй ссылки на Google Calendar`,
 		event.Name,
 		event.Description,
 		event.Date.Format("02.01.2006 15:04"),

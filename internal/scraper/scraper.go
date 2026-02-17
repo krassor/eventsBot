@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"app/main.go/internal/config"
-	"app/main.go/internal/models/domain"
-	"app/main.go/internal/scraper/sites"
+	"eventsBot/internal/config"
+	"eventsBot/internal/models/domain"
+	"eventsBot/internal/scraper/sites"
 
 	"github.com/google/uuid"
 )

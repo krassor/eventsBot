@@ -1,12 +1,13 @@
 package dto
 
 import (
-	"app/main.go/internal/models/domain"
 	"encoding/json"
+	"eventsBot/internal/models/domain"
 	"fmt"
-	"strconv"
+
+	//"strconv"
 	"strings"
-	"time"
+	//"time"
 
 	"github.com/google/uuid"
 )
@@ -38,57 +39,56 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 
 // EventStructuredResponseSchema - структура для получения данных о концертах и мероприятиях
 type EventStructuredResponseSchema struct {
-	Name                string              `json:"name" description:"Название мероприятия"`
-	Photo               string              `json:"photo" description:"Ссылка на фото мероприятия"`
-	Description         string              `json:"description" description:"Описание мероприятия"`
-	Date                string              `json:"date" description:"Дата и время мероприятия"`
-	Price               string              `json:"price" description:"Цена билета на мероприятие"`
-	Currency            string              `json:"currency" description:"Валюта цены (например: EUR, USD, RUB)"`
-	EventLink           string              `json:"event_link" description:"Ссылка на страницу мероприятия"`
-	MapLink             string              `json:"map_link" description:"Ссылка на местоположение на карте"`
-	CalendarLinkIOS     string              `json:"calendar_link_ios" description:"Ссылка для добавления в календарь iPhone"`
-	CalendarLinkAndroid string              `json:"calendar_link_android" description:"Ссылка для добавления в календарь Android"`
-	Tag                 FlexibleStringSlice `json:"tag" description:"Теги мероприятия (например: концерт, выставка, фестиваль)"`
+	Name string `json:"name" description:"Название мероприятия"`
+	//Photo               string              `json:"photo" description:"Ссылка на фото мероприятия"`
+	Description string `json:"description" description:"Описание мероприятия"`
+	//Date                string              `json:"date" description:"Дата и время мероприятия"`
+	//Price               string              `json:"price" description:"Цена билета на мероприятие"`
+	//Currency            string              `json:"currency" description:"Валюта цены (например: EUR, USD, RUB)"`
+	//EventLink           string              `json:"event_link" description:"Ссылка на страницу мероприятия"`
+	MapLink      string              `json:"map_link" description:"Ссылка на местоположение на карте"`
+	CalendarLink string              `json:"calendar_link" description:"Ссылка для добавления в календарь"`
+	Tag          FlexibleStringSlice `json:"tag" description:"Теги мероприятия (например: концерт, выставка, фестиваль)"`
 }
 
 func (e EventStructuredResponseSchema) ToDomain() domain.Event {
 	// Парсинг цены: убираем лишние пробелы и возможные символы валюты, если они попали в строку
-	priceStr := strings.TrimSpace(e.Price)
-	priceStr = strings.ReplaceAll(priceStr, ",", ".")
-	price, _ := strconv.ParseFloat(priceStr, 64)
+	// priceStr := strings.TrimSpace(e.Price)
+	// priceStr = strings.ReplaceAll(priceStr, ",", ".")
+	// price, _ := strconv.ParseFloat(priceStr, 64)
 
 	// Парсинг даты: пробуем несколько форматов
-	layouts := []string{
-		"02.01.2006 15:04",
-		"2006-01-02 15:04",
-		time.RFC3339,
-	}
+	// layouts := []string{
+	// 	"02.01.2006 15:04",
+	// 	"2006-01-02 15:04",
+	// 	time.RFC3339,
+	// }
 
-	var eventDate time.Time
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, e.Date); err == nil {
-			eventDate = t
-			break
-		}
-	}
+	// var eventDate time.Time
+	// for _, layout := range layouts {
+	// 	if t, err := time.Parse(layout, e.Date); err == nil {
+	// 		eventDate = t
+	// 		break
+	// 	}
+	// }
 
 	var tags strings.Builder
 	for _, tag := range e.Tag {
+		tag = strings.ReplaceAll(tag, " ", "")
 		fmt.Fprintf(&tags, "#%s ", tag)
 	}
 
 	return domain.Event{
-		ID:                  uuid.New(),
-		Name:                e.Name,
-		Photo:               e.Photo,
-		Description:         e.Description,
-		Date:                eventDate,
-		Price:               price,
-		Currency:            e.Currency,
-		EventLink:           e.EventLink,
+		ID:   uuid.New(),
+		Name: e.Name,
+		//Photo:               e.Photo,
+		Description: e.Description,
+		//Date:                eventDate,
+		//Price:               price,
+		//Currency:            e.Currency,
+		//EventLink:           e.EventLink,
 		MapLink:             e.MapLink,
-		CalendarLinkIOS:     e.CalendarLinkIOS,
-		CalendarLinkAndroid: e.CalendarLinkAndroid,
+		CalendarLinkAndroid: e.CalendarLink,
 		Tag:                 tags.String(),
 	}
 }
@@ -105,7 +105,8 @@ func (e EventStructuredResponseSchema) ApplyToEvent(event domain.Event) domain.E
 	if len(e.Tag) > 0 {
 		var tags strings.Builder
 		for _, tag := range e.Tag {
-			fmt.Fprintf(&tags, "#%s ", strings.TrimSpace(tag))
+			tag = strings.ReplaceAll(tag, " ", "")
+			fmt.Fprintf(&tags, "#%s ", tag)
 		}
 		event.Tag = tags.String()
 	}
@@ -116,11 +117,8 @@ func (e EventStructuredResponseSchema) ApplyToEvent(event domain.Event) domain.E
 	}
 
 	// Обновляем ссылки на календари
-	if strings.TrimSpace(e.CalendarLinkIOS) != "" {
-		event.CalendarLinkIOS = e.CalendarLinkIOS
-	}
-	if strings.TrimSpace(e.CalendarLinkAndroid) != "" {
-		event.CalendarLinkAndroid = e.CalendarLinkAndroid
+	if strings.TrimSpace(e.CalendarLink) != "" {
+		event.CalendarLinkAndroid = e.CalendarLink
 	}
 
 	// Если AI обновил название, применяем

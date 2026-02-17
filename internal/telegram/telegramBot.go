@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"unicode/utf16"
 
-	"app/main.go/internal/config"
-	"app/main.go/internal/utils/logger/sl"
+	"eventsBot/internal/config"
+	"eventsBot/internal/utils/logger/sl"
 
 	"log/slog"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/google/uuid"
 )
 
 type AIBotApi interface {
@@ -20,7 +21,7 @@ type AIBotApi interface {
 
 // Repository определяет интерфейс для взаимодействия с хранилищем событий.
 type Repository interface {
-	UpdateEventStatus(ctx context.Context, eventID string, status string) error
+	UpdateEventStatus(ctx context.Context, eventID uuid.UUID, status string) error
 }
 
 type Bot struct {
@@ -55,11 +56,13 @@ func New(logger *slog.Logger, cfg *config.Config, repository Repository) *Bot {
 		log.Error("error auth telegram bot", slog.String("error", err.Error()))
 	}
 
-	if cfg.Env == "local" {
-		bot.Debug = true
-	} else {
-		bot.Debug = false
-	}
+	// if cfg.Env == "local" {
+	// 	bot.Debug = true
+	// } else {
+	// 	bot.Debug = false
+	// }
+
+	bot.Debug = false
 
 	log.Info("Authorized on account", slog.String("UserName", bot.Self.UserName))
 
@@ -196,11 +199,12 @@ func (bot *Bot) isBotMentioned(update *tgbotapi.Update) bool {
 }
 
 func (bot *Bot) isReplyToBotMessage(update *tgbotapi.Update) bool {
-	result := false
+
 	if update.Message.ReplyToMessage != nil && update.Message.ReplyToMessage.From.ID == bot.tgbot.Self.ID {
-		result = true
+		return true
+	} else {
+		return false
 	}
-	return result
 }
 
 func (bot *Bot) sendReplyMessage(inputMsg *tgbotapi.Message, replyText string) error {

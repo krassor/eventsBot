@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"app/main.go/internal/models/domain"
+	"eventsBot/internal/models/domain"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/geziyor/geziyor"
@@ -145,14 +145,17 @@ func scrapeLococlubEventDetails(url string) (domain.Event, error) {
 
 			// Видео (YouTube, Vimeo iframes или video tags)
 			if src, ok := r.HTMLDoc.Find(".mec-single-event-description iframe[src*=\"youtube\"]").Attr("src"); ok {
-				event.VideoURL = src
-			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description iframe[src*=\"vimeo\"]").Attr("src"); ok {
-				event.VideoURL = src
-			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video source").Attr("src"); ok {
-				event.VideoURL = src
-			} else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video").Attr("src"); ok {
+				src = strings.ReplaceAll(src, "embed/", "watch?v=")
+				src = strings.ReplaceAll(src, "?feature=oembed", "")
 				event.VideoURL = src
 			}
+			// else if src, ok := r.HTMLDoc.Find(".mec-single-event-description iframe[src*=\"vimeo\"]").Attr("src"); ok {
+			// 	event.VideoURL = src
+			// } else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video source").Attr("src"); ok {
+			// 	event.VideoURL = src
+			// } else if src, ok := r.HTMLDoc.Find(".mec-single-event-description video").Attr("src"); ok {
+			// 	event.VideoURL = src
+			// }
 
 			event.Tag = ""
 		},

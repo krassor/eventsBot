@@ -1,19 +1,21 @@
 package main
 
 import (
-	"app/main.go/internal/config"
-	"app/main.go/internal/graceful"
-	"app/main.go/internal/openrouter"
-	"app/main.go/internal/orchestrator"
-	"app/main.go/internal/repositories"
-	"app/main.go/internal/scraper"
-	telegramBot "app/main.go/internal/telegram"
-	"app/main.go/internal/utils/logger/handlers/slogpretty"
 	"context"
+	"eventsBot/internal/config"
+	"eventsBot/internal/graceful"
+	"eventsBot/internal/openrouter"
+	"eventsBot/internal/orchestrator"
+	"eventsBot/internal/repositories"
+	"eventsBot/internal/scraper"
+	telegramBot "eventsBot/internal/telegram"
+	"eventsBot/internal/transport/httpServer"
+	"eventsBot/internal/transport/httpServer/handlers"
+	"eventsBot/internal/transport/httpServer/routers"
+	"eventsBot/internal/utils/logger/handlers/slogpretty"
 	"log/slog"
 	"os"
 	"time"
-	//openai "app/main.go/internal/openai"
 )
 
 const (
@@ -43,6 +45,11 @@ func main() {
 	tgBot := telegramBot.New(log, cfg, repositoryService)
 	orchestratorService := orchestrator.New(log, cfg, scraperService, aiService, repositoryService, tgBot, scraperService.CompletedEventsChan)
 
+	// HTTP Server
+	eventHandler := handlers.NewEventHandler(log, repositoryService, orchestratorService)
+	router := routers.NewRouter(eventHandler)
+	httpSrv := httpServer.NewHttpServer(log, router, cfg)
+
 	maxSecond := 15 * time.Second
 	waitShutdown := graceful.GracefulShutdown(
 		context.Background(),
@@ -63,6 +70,9 @@ func main() {
 			"Orchestrator service": func(ctx context.Context) error {
 				return orchestratorService.Shutdown(ctx)
 			},
+			"HTTP server": func(ctx context.Context) error {
+				return httpSrv.Shutdown(ctx)
+			},
 		},
 		log,
 	)
@@ -71,6 +81,7 @@ func main() {
 	go scraperService.Start()
 	go orchestratorService.Start()
 	go tgBot.Start(30)
+	go httpSrv.Listen()
 
 	<-waitShutdown
 }

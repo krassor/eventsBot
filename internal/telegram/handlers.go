@@ -12,9 +12,10 @@ import (
 
 	"log/slog"
 
-	"app/main.go/internal/models/domain"
+	"eventsBot/internal/models/domain"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/google/uuid"
 )
 
 type sendFunction func(inputMsg *tgbotapi.Message, replyText string) error
@@ -239,7 +240,7 @@ func (bot *Bot) fileHandler(ctx context.Context, update *tgbotapi.Update, sendFu
 	}
 
 	if !isAdmin {
-		return fmt.Errorf("User dont have admin permission")
+		return fmt.Errorf("user dont have admin permission")
 	}
 
 	userState := bot.UsersState[update.Message.From.ID]
@@ -253,7 +254,7 @@ func (bot *Bot) fileHandler(ctx context.Context, update *tgbotapi.Update, sendFu
 	if !userState.AwaitingFile {
 		replyText = "File not awaiting"
 		err := sendFunc(update.Message, replyText)
-		e := fmt.Errorf("File not awaiting")
+		e := fmt.Errorf("file not awaiting")
 		if err != nil {
 			return fmt.Errorf("%s: %w", op, err)
 		}
@@ -600,14 +601,18 @@ func (bot *Bot) formatEventMessage(event *domain.Event) string {
 		fmt.Fprintf(&sb, "🎬 <a href=\"%s\">Видео</a>\n", event.VideoURL)
 	}
 
-	if event.CalendarLinkIOS != "" || event.CalendarLinkAndroid != "" {
-		sb.WriteString("\n📆 Добавить в календарь:\n")
-		if event.CalendarLinkIOS != "" {
-			fmt.Fprintf(&sb, "  • <a href=\"%s\">iOS</a>\n", event.CalendarLinkIOS)
-		}
-		if event.CalendarLinkAndroid != "" {
-			fmt.Fprintf(&sb, "  • <a href=\"%s\">Android</a>\n", event.CalendarLinkAndroid)
-		}
+	// if event.CalendarLinkIOS != "" || event.CalendarLinkAndroid != "" {
+	// 	sb.WriteString("\n📆 Добавить в календарь:\n")
+	// 	if event.CalendarLinkIOS != "" {
+	// 		fmt.Fprintf(&sb, "  • <a href=\"%s\">iOS</a>\n", event.CalendarLinkIOS)
+	// 	}
+	// 	if event.CalendarLinkAndroid != "" {
+	// 		fmt.Fprintf(&sb, "  • <a href=\"%s\">Android</a>\n", event.CalendarLinkAndroid)
+	// 	}
+	// }
+
+	if event.CalendarLinkAndroid != "" {
+		fmt.Fprintf(&sb, "  • <a href=\"%s\">📆 Добавить в календарь</a>\n", event.CalendarLinkAndroid)
 	}
 
 	return sb.String()
@@ -634,7 +639,14 @@ func (bot *Bot) handleApproveEvent(callback *tgbotapi.CallbackQuery, eventID str
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := bot.repository.UpdateEventStatus(ctx, eventID, string(domain.EventStatusApproved))
+	id, err := uuid.Parse(eventID)
+	if err != nil {
+		log.Error("failed to parse event ID", slog.String("error", err.Error()))
+		bot.sendCallbackResponse(callback, "❌ Ошибка при одобрении события")
+		return
+	}
+
+	err = bot.repository.UpdateEventStatus(ctx, id, string(domain.EventStatusApproved))
 	if err != nil {
 		log.Error("failed to approve event", slog.String("error", err.Error()))
 		bot.sendCallbackResponse(callback, "❌ Ошибка при одобрении события")
@@ -654,10 +666,17 @@ func (bot *Bot) handleDeclineEvent(callback *tgbotapi.CallbackQuery, eventID str
 		slog.String("eventID", eventID),
 	)
 
+	id, err := uuid.Parse(eventID)
+	if err != nil {
+		log.Error("failed to parse event ID", slog.String("error", err.Error()))
+		bot.sendCallbackResponse(callback, "❌ Ошибка при отклонении события")
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := bot.repository.UpdateEventStatus(ctx, eventID, string(domain.EventStatusRejected))
+	err = bot.repository.UpdateEventStatus(ctx, id, string(domain.EventStatusRejected))
 	if err != nil {
 		log.Error("failed to decline event", slog.String("error", err.Error()))
 		bot.sendCallbackResponse(callback, "❌ Ошибка при отклонении события")

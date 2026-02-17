@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"app/main.go/internal/config"
-	"app/main.go/internal/models/domain"
+	"eventsBot/internal/config"
+	"eventsBot/internal/models/domain"
 
 	"github.com/google/uuid"
 )
@@ -76,8 +76,21 @@ func (o *Orchestrator) Start() {
 	// Горутина слушает CompletedEventsChan от скрапера и отправляет в AI
 	go o.processScrapedEvents()
 
-	// Горутина слушает NewEventsChan от репозитория и отправляет в AI
-	go o.processNewEvents()
+	// Горутина проверяет в репозитории события в статусе NEW и отправляет в AI
+	go o.processNewEventsFromRepo()
+
+	// Горутина проверяет в репозитории события в статусе READY_TO_APPROVE и отправляет в Telegram
+	go o.SendEventsFromRepoToTelegram()
+
+	// Добавляем сайты из конфигурации в очередь скрапера
+	if err := o.EnqueueSites(); err != nil {
+		log.Error("failed to enqueue sites", slog.String("error", err.Error()))
+	}
+}
+
+func (o *Orchestrator) SendEventsFromRepoToTelegram() {
+	op := "Orchestrator.SendEventsToTelegram()"
+	log := o.logger.With(slog.String("op", op))
 
 	events, err := o.repository.FindEventsByStatus(context.Background(), domain.EventStatusReadyToApprove)
 	if err != nil {
@@ -86,18 +99,29 @@ func (o *Orchestrator) Start() {
 	}
 
 	for _, event := range events {
-		o.telegramBot.SendEvent(&event, o.cfg.BotConfig.ChannelIDs)
-	}
-
-	// Добавляем сайты из конфигурации в очередь скрапера
-	if err := o.EnqueueSites(); err != nil {
-		log.Error("failed to enqueue sites", slog.String("error", err.Error()))
+		err := o.SendEventToTelegram(&event)
+		if err != nil {
+			log.Error("failed to send event to Telegram", slog.String("error", err.Error()))
+			continue
+		}
 	}
 }
 
-// processNewEvents ищет все события в статусе NEW в репозитории и отправляет в AI
-func (o *Orchestrator) processNewEvents() {
-	op := "Orchestrator.processNewEvents()"
+func (o *Orchestrator) SendEventToTelegram(event *domain.Event) error {
+	op := "Orchestrator.SendEventToTelegram()"
+	log := o.logger.With(slog.String("op", op))
+
+	err := o.telegramBot.SendEvent(event, o.cfg.BotConfig.ChannelIDs)
+	if err != nil {
+		log.Error("failed to send event to Telegram", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
+}
+
+// processNewEventsFromRepo ищет все события в статусе NEW в репозитории и отправляет в AI
+func (o *Orchestrator) processNewEventsFromRepo() {
+	op := "Orchestrator.processNewEventsFromRepo()"
 	log := o.logger.With(slog.String("op", op))
 
 	events, err := o.repository.FindEventsByStatus(context.Background(), domain.EventStatusNew)
@@ -146,34 +170,6 @@ func (o *Orchestrator) processScrapedEvents() {
 	}
 }
 
-// AddJob добавляет джобу в скрапер и сохраняет канал Done для ожидания.
-func (o *Orchestrator) AddJob(siteName string, url string) error {
-	op := "Orchestrator.AddJob()"
-	log := o.logger.With(slog.String("op", op))
-
-	requestID := uuid.New()
-	doneChan, err := o.scraper.AddJob(requestID, siteName, url)
-	if err != nil {
-		log.Error("failed to add job",
-			slog.String("siteName", siteName),
-			slog.String("url", url),
-			slog.String("error", err.Error()),
-		)
-		return err
-	}
-
-	o.mu.Lock()
-	o.doneChans = append(o.doneChans, doneChan)
-	o.mu.Unlock()
-
-	log.Debug("job added",
-		slog.String("requestID", requestID.String()),
-		slog.String("siteName", siteName),
-	)
-
-	return nil
-}
-
 // EnqueueSites добавляет все сайты из конфигурации в очередь скрапера.
 func (o *Orchestrator) EnqueueSites() error {
 	op := "Orchestrator.EnqueueSites()"
@@ -199,6 +195,34 @@ func (o *Orchestrator) EnqueueSites() error {
 		}
 		log.Debug("site enqueued", slog.String("name", site.Name), slog.String("url", site.URL))
 	}
+
+	return nil
+}
+
+// AddJob добавляет джобу в скрапер и сохраняет канал Done для ожидания.
+func (o *Orchestrator) AddJob(siteName string, url string) error {
+	op := "Orchestrator.AddJob()"
+	log := o.logger.With(slog.String("op", op))
+
+	requestID := uuid.New()
+	doneChan, err := o.scraper.AddJob(requestID, siteName, url)
+	if err != nil {
+		log.Error("failed to add job",
+			slog.String("siteName", siteName),
+			slog.String("url", url),
+			slog.String("error", err.Error()),
+		)
+		return err
+	}
+
+	o.mu.Lock()
+	o.doneChans = append(o.doneChans, doneChan)
+	o.mu.Unlock()
+
+	log.Debug("job added",
+		slog.String("requestID", requestID.String()),
+		slog.String("siteName", siteName),
+	)
 
 	return nil
 }

@@ -1,10 +1,11 @@
 package repositories
 
 import (
-	"app/main.go/internal/config"
-	"app/main.go/internal/migrator"
-	"app/main.go/internal/utils/logger/sl"
 	"context"
+	"eventsBot/internal/config"
+	"eventsBot/internal/migrator"
+	"eventsBot/internal/models/domain"
+	"eventsBot/internal/utils/logger/sl"
 	"fmt"
 	"log/slog"
 
@@ -15,6 +16,11 @@ import (
 type Repository struct {
 	DB  *sqlx.DB
 	log *slog.Logger
+}
+
+// ListEvents implements [openrouter.Repository].
+func (r *Repository) ListEvents(ctx context.Context) ([]domain.Event, error) {
+	panic("unimplemented")
 }
 
 func New(logger *slog.Logger, cfg *config.Config) *Repository {

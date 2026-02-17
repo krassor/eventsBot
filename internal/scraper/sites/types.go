@@ -3,7 +3,7 @@ package sites
 import (
 	"context"
 
-	"app/main.go/internal/models/domain"
+	"eventsBot/internal/models/domain"
 )
 
 // ScrapeFunc — тип функции скрапера для конкретного сайта.
